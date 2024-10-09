@@ -10,37 +10,6 @@ pub const std_options = .{
     .logFn = logfns.stdErrLog,
 };
 
-inline fn ctrlKey(comptime char: u8) u8 {
-    return char & 0b00011111;
-}
-
-// inline fn ctrlKey(char: u8) u8 {
-//     return char & 0b00011111;
-// }
-
-fn isCtrlKey(key: u8, char: u8) bool {
-    if (!std.ascii.isControl(key)) {
-        return false;
-    }
-
-    return key == (char & 0b00011111);
-}
-
-const EditorError = error{
-    Quit,
-};
-
-fn processKeyPress(c: u8) EditorError!u8 {
-    switch (c) {
-        ctrlKey('c') => {
-            return EditorError.Quit;
-        },
-        else => {
-            return c;
-        },
-    }
-}
-
 const log = std.log.scoped(.main);
 
 pub fn main() !void {
@@ -62,17 +31,19 @@ pub fn main() !void {
         .cols = dimensions.ws_col,
     });
 
+    var stdinWriter = stdin.writer();
+
+    _ = try stdinWriter.write("\x1b[B");
+    _ = try stdinWriter.write("\x1b[B");
+    _ = try stdinWriter.write("\x1b[B");
+    _ = try stdinWriter.write("\x1b[B");
+    _ = try stdinWriter.write("\x1b[B");
+
     var e = editor.Editor.init(allocator, terminal, stdin);
     defer e.deinit();
 
     // try e.open();
-    try e.openFile("tests/file.txt");
+    try e.open("tests/file.txt");
 
     try e.start();
-}
-
-test "isCtrlKey" {
-    const isCtrlQ = isCtrlKey(17, 'q');
-
-    try expect(isCtrlQ);
 }

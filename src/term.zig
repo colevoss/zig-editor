@@ -1,14 +1,16 @@
 const std = @import("std");
 const posix = std.posix;
 
+const log = std.log.scoped(.term);
+
 pub const Term = struct {
     buf: std.io.BufferedWriter(4096, std.fs.File.Writer),
 
     cx: u16 = 0,
     cy: u16 = 0,
 
-    rows: u16,
-    cols: u16,
+    rows: usize,
+    cols: usize,
 
     pub const Config = struct {
         file: std.fs.File,
@@ -34,16 +36,18 @@ pub const Term = struct {
         _ = try self.buf.write("\x1b[H");
     }
 
-    pub fn drawRow(self: *Term, row: []const u8) !void {
-        _ = try self.buf.write(row);
+    pub fn drawRow(self: *Term, str: []const u8, row: usize) !void {
+        _ = try self.buf.write(str);
         // clear row right of tilde
         _ = try self.buf.write("\x1b[K");
-        _ = try self.buf.write("\r\n");
+
+        if (row < self.rows - 1) {
+            _ = try self.buf.write("\r\n");
+        }
     }
 
-    pub fn finish(self: *Term, rowStart: u8) !void {
-        var i: u8 = rowStart;
-        // var i: u8 = 0;
+    pub fn finish(self: *Term, rowStart: usize, cx: usize, cy: usize) !void {
+        var i: usize = rowStart;
 
         while (i < self.rows) : (i += 1) {
             _ = try self.buf.write("~");
@@ -55,13 +59,14 @@ pub const Term = struct {
             }
         }
 
-        try self.drawCursor();
+        try self.drawCursor(cx, cy);
 
         // Reshow cursor
         _ = try self.buf.write("\x1b[?25h");
         try self.buf.flush();
     }
 
+    // @deprecated
     pub fn refreshScreen(self: *Term) !void {
         // hide cursor
         _ = try self.buf.write("\x1b[?25l");
@@ -77,13 +82,15 @@ pub const Term = struct {
         try self.buf.flush();
     }
 
-    pub fn drawCursor(self: *Term) !void {
+    pub fn drawCursor(self: *Term, x: usize, y: usize) !void {
         try std.fmt.format(
             self.buf.writer(),
             "\x1b[{d};{d}H",
             .{
-                self.cy + 1,
-                self.cx + 1,
+                y + 1,
+                x + 1,
+                // self.cy + 1,
+                // self.cx + 1,
             },
         );
     }
