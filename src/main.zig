@@ -31,15 +31,7 @@ pub fn main() !void {
         .cols = dimensions.ws_col,
     });
 
-    var stdinWriter = stdin.writer();
-
-    _ = try stdinWriter.write("\x1b[B");
-    _ = try stdinWriter.write("\x1b[B");
-    _ = try stdinWriter.write("\x1b[B");
-    _ = try stdinWriter.write("\x1b[B");
-    _ = try stdinWriter.write("\x1b[B");
-
-    var e = editor.Editor.init(allocator, terminal, stdin);
+    var e = editor.Editor(std.fs.File).init(allocator, terminal, stdin);
     defer e.deinit();
 
     // try e.open();
