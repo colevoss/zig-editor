@@ -1,9 +1,8 @@
 const std = @import("std");
-const keys = @import("keys.zig");
 const display = @import("display.zig");
+const Input = @import("Input.zig");
 
 const Term = @import("term.zig").Term;
-const Input = keys.Input;
 
 const log = std.log.scoped(.editor);
 
@@ -11,10 +10,6 @@ pub const Editor = struct {
     allocator: std.mem.Allocator,
 
     term: Term,
-    in: std.fs.File,
-    reader: std.fs.File.Reader,
-
-    inputBuffer: [3]u8 = undefined,
 
     rows: std.ArrayList(Row),
 
@@ -38,7 +33,9 @@ pub const Editor = struct {
         escape,
     };
 
-    pub fn init(alloc: std.mem.Allocator, term: Term, in: std.fs.File) Editor {
+    const Self = @This();
+
+    pub fn init(alloc: std.mem.Allocator, term: Term) Self {
         const disp = display.Display{
             .rows = term.rows,
             .cols = term.cols,
@@ -48,15 +45,13 @@ pub const Editor = struct {
 
         return .{
             .allocator = alloc,
-            .in = in,
-            .reader = in.reader(),
             .term = term,
             .display = disp,
             .rows = std.ArrayList(Row).init(alloc),
         };
     }
 
-    pub fn deinit(self: *Editor) void {
+    pub fn deinit(self: *Self) void {
         for (self.rows.items) |row| {
             self.allocator.free(row.chars);
         }
@@ -64,7 +59,7 @@ pub const Editor = struct {
         self.rows.deinit();
     }
 
-    pub fn open(self: *Editor, path: []const u8) !void {
+    pub fn open(self: *Self, path: []const u8) !void {
         const file = try std.fs.cwd().openFile(path, .{});
         defer file.close();
 
@@ -94,7 +89,7 @@ pub const Editor = struct {
         self.display.fileRows = self.rows.items.len;
     }
 
-    fn draw(self: *Editor) !void {
+    fn draw(self: *Self) !void {
         try self.term.prepare();
 
         var i: usize = 0;
@@ -106,116 +101,70 @@ pub const Editor = struct {
         } else {
             rows = self.rows.items.len;
         }
-        // const rows = @min(self.term.rows, self.rows.items.len);
 
         while (i < rows) : (i += 1) {
             const rowI = i + self.display.offsetY;
-            // log.debug("rowI {d}", .{rowI});
             try self.term.drawRow(self.rows.items[rowI].chars, i);
         }
 
         try self.term.finish(i, self.display.cursorX, self.display.cursorY);
     }
 
-    pub fn start(self: *Editor) !void {
-        try self.draw();
-
+    pub fn start(self: *Self, reader: anytype) !void {
         defer {
-            self.term.cx = 0;
-            self.term.cy = 0;
-            self.term.prepare() catch unreachable;
-            self.term.finish(0, 0, 0) catch unreachable;
+            self.term.reset() catch unreachable;
         }
+        // defer {
+        //     self.term.cx = 0;
+        //     self.term.cy = 0;
+        //     self.term.prepare() catch unreachable;
+        //     self.term.finish(0, 0, 0) catch unreachable;
+        // }
 
         log.debug("Starting editori", .{});
         log.err("Startin editor (err)", .{});
 
         while (true) {
-            // try self.term.refreshScreen();
             try self.draw();
 
-            const input = try self.read();
-
-            switch (input.tag) {
-                .none => continue,
-                .escape, .illegal => return,
-                .move_up, .move_down, .move_right, .move_left => {
-                    self.moveCursor(input.tag);
+            self.read(reader) catch |err| switch (err) {
+                Error.Quit => {
+                    return;
                 },
-                .printable => {
-                    log.debug("Char {c}", .{input.data});
-                    // try writer.writeByte(input.data);
-                    // try writer.print("{c}", .{input.data});
+                else => {
+                    log.err("Error processing input {}\n", .{err});
+                    continue;
                 },
-            }
+            };
         }
     }
 
-    fn read(self: *Editor) !Input {
-        var state = State.read;
+    pub fn read(self: *Self, reader: anytype) !void {
+        const i = try Input.read(reader);
 
-        var input = Input{
-            .tag = .none,
-        };
-
-        const n = try self.reader.readAtLeast(&self.inputBuffer, 1);
-
-        var i: u8 = 0;
-
-        while (i < n) : (i += 1) {
-            const c = self.inputBuffer[i];
-
-            switch (state) {
-                .read => switch (c) {
-                    keys.ctrlKey('c') => {
-                        input.tag = .escape;
-                        break;
-                    },
-                    // 'h', 'j', 'k', 'l' => {
-                    //     input.tag = Input.Tag.moveFromKey(c);
-                    //     break;
-                    // },
-                    32...126 => {
-                        input.tag = .printable;
-                        input.data = c;
-
-                        break;
-                    },
-                    '\x1b' => {
-                        if (n == 1) {
-                            input.tag = .escape;
-                            break;
-                        }
-
-                        state = .escape;
-                    },
-                    else => {},
-                },
-                .escape => {
-                    switch (c) {
-                        '[' => {
-                            state = .control;
-                        },
-                        else => {
-                            log.debug("IDK esc", .{});
-                        },
-                    }
-                },
-                .control => switch (c) {
-                    'A', 'B', 'C', 'D' => {
-                        input.tag = Input.Tag.moveFromKey(c);
-                        break;
-                    },
-                    '0'...'9' => {},
-                    else => {},
-                },
-            }
-        }
-
-        return input;
+        return self.processInput(i);
     }
 
-    pub fn moveCursor(self: *Editor, tag: Input.Tag) void {
+    pub fn processInput(self: *Self, input: Input.Action) !void {
+        switch (input.tag) {
+            .none => return,
+            .escape, .illegal => {
+                return Error.Quit;
+            },
+            .move_up,
+            .move_down,
+            .move_right,
+            .move_left,
+            => {
+                self.moveCursor(input.tag);
+            },
+            .printable => {
+                log.debug("Char {c}", .{input.data});
+            },
+        }
+    }
+
+    pub fn moveCursor(self: *Self, tag: Input.Action.Tag) void {
         switch (tag) {
             .move_left => {
                 self.display.move(.left, 1);

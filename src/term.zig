@@ -4,7 +4,9 @@ const posix = std.posix;
 const log = std.log.scoped(.term);
 
 pub const Term = struct {
-    buf: std.io.BufferedWriter(4096, std.fs.File.Writer),
+    const BufferedWriter = std.io.BufferedWriter(4096, std.fs.File.Writer);
+
+    buf: BufferedWriter,
 
     cx: u16 = 0,
     cy: u16 = 0,
@@ -13,13 +15,13 @@ pub const Term = struct {
     cols: usize,
 
     pub const Config = struct {
-        file: std.fs.File,
+        // file: std.fs.File,
         rows: u16,
         cols: u16,
     };
 
-    pub fn init(config: Config) Term {
-        const buf = std.io.bufferedWriter(config.file.writer());
+    pub fn init(buf: BufferedWriter, config: Config) Term {
+        // const buf = std.io.bufferedWriter(config.file.writer());
 
         return .{
             .buf = buf,
@@ -28,12 +30,23 @@ pub const Term = struct {
         };
     }
 
+    pub fn reset(self: *Term) !void {
+        try self.prepare();
+        _ = try self.buf.write("\x1b[?25h");
+        try self.buf.flush();
+    }
+
     pub fn prepare(self: *Term) !void {
+        try self.clear();
         // hide cursor
         _ = try self.buf.write("\x1b[?25l");
 
         // reset cursor to 0
         _ = try self.buf.write("\x1b[H");
+    }
+
+    pub fn clear(self: *Term) !void {
+        _ = try self.buf.write("\x1b[2J");
     }
 
     pub fn drawRow(self: *Term, str: []const u8, row: usize) !void {
@@ -66,32 +79,11 @@ pub const Term = struct {
         try self.buf.flush();
     }
 
-    // @deprecated
-    pub fn refreshScreen(self: *Term) !void {
-        // hide cursor
-        _ = try self.buf.write("\x1b[?25l");
-
-        // reset cursor to 0
-        _ = try self.buf.write("\x1b[H");
-
-        try self.drawRows();
-        try self.drawCursor();
-
-        // Reshow cursor
-        _ = try self.buf.write("\x1b[?25h");
-        try self.buf.flush();
-    }
-
     pub fn drawCursor(self: *Term, x: usize, y: usize) !void {
         try std.fmt.format(
             self.buf.writer(),
             "\x1b[{d};{d}H",
-            .{
-                y + 1,
-                x + 1,
-                // self.cy + 1,
-                // self.cx + 1,
-            },
+            .{ y + 1, x + 1 },
         );
     }
 
@@ -172,7 +164,9 @@ pub const TermIO = struct {
         // disable CTRL-C and CTRL-Z
         newSettings.lflag.ISIG = false;
         // disables CTRL-V
-        newSettings.lflag.IEXTEN = false; // disables CTRL-S and CTRL-Q newSettings.iflag.IXON = false;
+        newSettings.lflag.IEXTEN = false;
+        // disables CTRL-S and CTRL-Q
+        newSettings.iflag.IXON = false;
         // disables CTRL-M
         newSettings.iflag.ICRNL = false;
 

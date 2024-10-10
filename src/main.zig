@@ -6,7 +6,6 @@ const expect = std.testing.expect;
 const logfns = @import("log.zig");
 
 pub const std_options = .{
-    // .log_level = .debug,
     .logFn = logfns.stdErrLog,
 };
 
@@ -25,25 +24,16 @@ pub fn main() !void {
 
     const dimensions = try termio.size();
 
-    const terminal = term.Term.init(.{
-        .file = stdout,
+    const buf = std.io.bufferedWriter(stdout.writer());
+
+    const terminal = term.Term.init(buf, .{
         .rows = dimensions.ws_row,
         .cols = dimensions.ws_col,
     });
 
-    var stdinWriter = stdin.writer();
-
-    _ = try stdinWriter.write("\x1b[B");
-    _ = try stdinWriter.write("\x1b[B");
-    _ = try stdinWriter.write("\x1b[B");
-    _ = try stdinWriter.write("\x1b[B");
-    _ = try stdinWriter.write("\x1b[B");
-
-    var e = editor.Editor.init(allocator, terminal, stdin);
+    var e = editor.Editor.init(allocator, terminal);
     defer e.deinit();
 
-    // try e.open();
     try e.open("tests/file.txt");
-
-    try e.start();
+    try e.start(stdin.reader());
 }
