@@ -52,17 +52,29 @@ pub fn build(b: *std.Build) void {
     // files, this ensures they will be present and in the expected location.
     run_cmd.step.dependOn(b.getInstallStep());
 
-    // This allows the user to pass arguments to the application in the build
-    // command itself, like this: `zig build run -- arg1 arg2 etc`
-    if (b.args) |args| {
-        run_cmd.addArgs(args);
-    }
-
     // This creates a build step. It will be visible in the `zig build --help` menu,
     // and can be selected like this: `zig build run`
     // This will evaluate the `run` step rather than the default, which is "install".
     const run_step = b.step("run", "Run the app");
     run_step.dependOn(&run_cmd.step);
+
+    const auto = b.addExecutable(.{
+        .name = "zig-editor-automation",
+        .root_source_file = b.path("src/auto.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    b.installArtifact(auto);
+    const run_auto = b.addRunArtifact(auto);
+    run_auto.step.dependOn(b.getInstallStep());
+    const run_auto_step = b.step("auto", "Run the auto app");
+    run_auto_step.dependOn(&run_auto.step);
+
+    // This allows the user to pass arguments to the application in the build
+    // command itself, like this: `zig build run -- arg1 arg2 etc`
+    if (b.args) |args| {
+        run_cmd.addArgs(args);
+    }
 
     // Creates a step for unit testing. This only builds the test executable
     // but does not run it.

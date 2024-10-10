@@ -12,9 +12,11 @@ pub fn Editor(comptime In: type) type {
         allocator: std.mem.Allocator,
 
         term: Term,
-        in: std.fs.File,
+        // in: std.fs.File,
+        in: In,
         // reader: std.fs.File.Reader,
         reader: In.Reader,
+        // reader: In.Reader,
 
         inputBuffer: [3]u8 = undefined,
 
@@ -122,7 +124,7 @@ pub fn Editor(comptime In: type) type {
         }
 
         pub fn start(self: *Self) !void {
-            try self.draw();
+            // try self.draw();
 
             defer {
                 self.term.cx = 0;
@@ -155,14 +157,16 @@ pub fn Editor(comptime In: type) type {
             }
         }
 
-        fn read(self: *Self) !Input {
+        pub fn read(self: *Self) !Input {
             var state = State.read;
 
             var input = Input{
                 .tag = .none,
             };
 
-            const n = try self.reader.readAtLeast(&self.inputBuffer, 1);
+            // const n = try self.reader.readAtLeast(&self.inputBuffer, 1);
+            const n = try self.in.reader().readAtLeast(&self.inputBuffer, 1);
+            log.info("C: {d}", .{n});
 
             var i: u8 = 0;
 
