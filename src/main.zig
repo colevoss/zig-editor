@@ -34,6 +34,20 @@ pub fn main() !void {
     var e = editor.Editor.init(allocator, terminal);
     defer e.deinit();
 
-    try e.open("tests/file.txt");
+    var args = try std.process.argsWithAllocator(allocator);
+    defer args.deinit();
+
+    _ = args.skip();
+    const path = args.next();
+
+    if (path) |p| {
+        try e.open(p);
+    }
+
     try e.start(stdin.reader());
+}
+
+test "tests" {
+    _ = @import("display.zig");
+    _ = @import("Input.zig");
 }

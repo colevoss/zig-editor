@@ -43,19 +43,15 @@ pub inline fn ctrlKey(comptime char: u8) u8 {
     return char & 0b00011111;
 }
 
-pub fn read(reader: anytype) !Action {
+pub fn read(n: usize, buf: []const u8) !Action {
     var state = State.read;
 
     var input = Action{
         .tag = .none,
     };
 
-    var buf: [3]u8 = undefined;
-    const n = try reader.readAtLeast(&buf, 1);
-
     var i: u8 = 0;
     while (i < n) : (i += 1) {
-        // const c = self.inputBuffer[i];
         const c = buf[i];
 
         switch (state) {
@@ -106,4 +102,21 @@ pub fn read(reader: anytype) !Action {
     }
 
     return input;
+}
+
+const testing = std.testing;
+
+test "read" {
+    const tests = [_]struct { []const u8, Action.Tag }{
+        .{ "\x03", .escape },
+        .{ "\x1b[A", .move_up },
+        .{ "\x1b[B", .move_down },
+        .{ "\x1b[C", .move_right },
+        .{ "\x1b[D", .move_left },
+    };
+
+    for (tests) |t| {
+        const action = try read(t[0].len, t[0]);
+        try testing.expectEqual(t[1], action.tag);
+    }
 }

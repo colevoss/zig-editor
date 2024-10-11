@@ -114,12 +114,6 @@ pub const Editor = struct {
         defer {
             self.term.reset() catch unreachable;
         }
-        // defer {
-        //     self.term.cx = 0;
-        //     self.term.cy = 0;
-        //     self.term.prepare() catch unreachable;
-        //     self.term.finish(0, 0, 0) catch unreachable;
-        // }
 
         log.debug("Starting editori", .{});
         log.err("Startin editor (err)", .{});
@@ -140,7 +134,9 @@ pub const Editor = struct {
     }
 
     pub fn read(self: *Self, reader: anytype) !void {
-        const i = try Input.read(reader);
+        var buf: [3]u8 = undefined;
+        const n = try reader.readAtLeast(&buf, 1);
+        const i = try Input.read(n, &buf);
 
         return self.processInput(i);
     }
